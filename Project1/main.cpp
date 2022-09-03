@@ -6,13 +6,14 @@
 #include <winsock2.h>
 #include <stdio.h>
 #include <thread>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
 // 网络数据报文的格式定义，需要和服务器端保持一致
 
 // 消息类型
 enum CMD
 {
-	CMD_LOGIN,
+	CMD_LOGIN = 1,
 	CMD_LOGIN_RESULT,
 	CMD_LOGOUT,
 	CMD_LOGOUT_RESULT,
@@ -23,8 +24,8 @@ enum CMD
 // 包头：描述本次消息包的大小，描述数据的作用
 struct DataHeader
 {
-	short dataLength;
-	short cmd;
+	int dataLength;
+	int cmd;
 };
 
 // 包体： 数据
@@ -85,43 +86,48 @@ struct NewUserJoin :public DataHeader
 int handleSocket(SOCKET _sock)
 {
 	// 用缓冲区来接收数据 为了适应固长数据和变长数据。现在还不处理粘包、分包的问题
-	char szRecz[4096] = {};
+	char szRecz[1024] = {};
 	// 先读取包头数据，判断消息的类型。
-	int nLen = recv(_sock, szRecz, sizeof(DataHeader), 0);
-	DataHeader* header = (DataHeader*)szRecz;
-
-	// 当 len 非零时，如果 recv 返回 0，说明连接的另外一端发送了一个 FIN 数据包，承诺没有更多需要发送的数据。
-	if (nLen <= 0)
-	{
-		printf("与服务器断开连接，任务结束\n");
-		return -1;
+	int nLen = recv(_sock, szRecz, 1024, 0);
+	if (nLen > 0) {
+		printf("str:  %s\n", szRecz);
 	}
 
-	switch (header->cmd)
-	{
-	case CMD_LOGIN_RESULT:
-	{
-		// 由于已经接收了包头，buffer 需要从包体开头读取，取包体数据。数据长度 len 应该是总数据包大小减去包头大小
-		recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-		LoginResult* loginResult = (LoginResult*)szRecz;
-		printf("接收到服务器的消息：CMD_LOGIN_RESULT，数据长度：%d\n", loginResult->dataLength);
-	}
-	break;
-	case CMD_LOGOUT_RESULT:
-	{
-		recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-		LogoutResult* logoutResult = (LogoutResult*)szRecz;
-		printf("接收到服务器的消息：CMD_LOGOUT_RESULT，数据长度：%d\n", logoutResult->dataLength);
-	}
-	break;
-	case CMD_NEW_USER_JOIN:
-	{
-		recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-		NewUserJoin* joinResult = (NewUserJoin*)szRecz;
-		printf("接收到服务器的消息：CMD_NEW_USER_JOIN，数据长度：%d\n", joinResult->dataLength);
-	}
-	break;
-	}
+
+	//DataHeader* header = (DataHeader*)szRecz;
+
+	//// 当 len 非零时，如果 recv 返回 0，说明连接的另外一端发送了一个 FIN 数据包，承诺没有更多需要发送的数据。
+	//if (nLen <= 0)
+	//{
+	//	printf("与服务器断开连接，任务结束\n");
+	//	return -1;
+	//}
+
+	//switch (header->cmd)
+	//{
+	//case CMD_LOGIN_RESULT:
+	//{
+	//	// 由于已经接收了包头，buffer 需要从包体开头读取，取包体数据。数据长度 len 应该是总数据包大小减去包头大小
+	//	recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+	//	LoginResult* loginResult = (LoginResult*)szRecz;
+	//	printf("接收到服务器的消息：CMD_LOGIN_RESULT，数据长度：%d\n", loginResult->dataLength);
+	//}
+	//break;
+	//case CMD_LOGOUT_RESULT:
+	//{
+	//	recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+	//	LogoutResult* logoutResult = (LogoutResult*)szRecz;
+	//	printf("接收到服务器的消息：CMD_LOGOUT_RESULT，数据长度：%d\n", logoutResult->dataLength);
+	//}
+	//break;
+	//case CMD_NEW_USER_JOIN:
+	//{
+	//	recv(_sock, szRecz + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+	//	NewUserJoin* joinResult = (NewUserJoin*)szRecz;
+	//	printf("接收到服务器的消息：CMD_NEW_USER_JOIN，数据长度：%d\n", joinResult->dataLength);
+	//}
+	//break;
+	//}
 	return 0;
 }
 
@@ -145,11 +151,27 @@ void cmdThread(SOCKET _sock)
 		}
 		else if (0 == strcmp(cmdBuf, "login"))
 		{
-			Login login;
-			strcpy(login.userName, "admin");
-			strcpy(login.password, "pwd");
+			//Login login;
+			//strcpy(login.userName, "admin");
+			//strcpy(login.password, "pwd");
 
-			send(_sock, (char*)&login, sizeof(Login), 0);
+			//send(_sock, (char*)&login, sizeof(Login), 0);
+
+			//char* data;
+			uint32_t len = 0;
+			uint32_t cmd = 1;
+			char name[] = "jojostr";
+			uint32_t strLen = 8;
+			len = 4 + 4 + 4 + 8;
+
+			char* data = new char[len];
+			std::memcpy(data, (char*)&len, 4);
+			std::memcpy(data + 4, (char*)&cmd, 4);
+			std::memcpy(data + 8, (char*)&strLen, 4);
+			std::memcpy(data + 12, name, 8);
+
+
+			send(_sock, data, len, 0);
 		}
 		else if (0 == strcmp(cmdBuf, "logout"))
 		{
@@ -186,12 +208,18 @@ int main()
 	// 2. 连接服务器 connect
 	sockaddr_in _sin = {};
 	_sin.sin_family = AF_INET;
-	_sin.sin_port = htons(4567);
+	_sin.sin_port = htons(134567);
 	// 服务器地址
 	_sin.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
 
 	// 调用 connect 函数通过给目的主机发送初始 SYN 数据包来启动 TCP 握手
 	int ret = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
+	// 用缓冲区来接收数据 为了适应固长数据和变长数据。现在还不处理粘包、分包的问题
+	char szRecz[1024] = {};
+	// 先读取包头数据，判断消息的类型。
+	int nLen = recv(_sock, szRecz, 1024, 0);
+	printf("str:  %s\n", szRecz);
+
 	if (SOCKET_ERROR == ret)
 	{
 		printf("Error: connect 连接套接字失败\n");
